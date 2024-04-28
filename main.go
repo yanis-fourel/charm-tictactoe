@@ -5,7 +5,10 @@ import (
 	"log"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
+
+var style_select = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF3333"))
 
 type Model struct {
 	board      *Board
@@ -97,7 +100,7 @@ func (m Model) View() string {
 	s := fmt.Sprintf("Turn %d: %s\n", m.turn_count, m.next_turn.Name())
 	for i := 0; i < 9; i++ {
 		if i == m.selx+3*m.sely && m.outcome == "" {
-			s += "*"
+			s += style_select.Render(string(m.board.data[i]))
 		} else {
 			s += string(m.board.data[i])
 		}
