@@ -3,164 +3,117 @@ package main
 import (
 	"fmt"
 	"log"
-	"strconv"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-type Tile rune
+type Model struct {
+	board      *Board
+	next_turn  Team
+	turn_count int
 
-const (
-	Tile_Empty Tile = '.'
-	Tile_O     Tile = 'O'
-	Tile_X     Tile = 'X'
-)
-
-// Constant
-var TeamName = map[Tile]string{
-	Tile_Empty: "No one",
-	Tile_O:     "Circle",
-	Tile_X:     "Cross",
+	selx, sely int
+	errmsg     string
+	outcome    string
 }
 
-type Board struct {
-	data [9]Tile
-}
-
-func NewBoard() Board {
-	data := [9]Tile{}
-	for i := range data {
-		data[i] = Tile_Empty
-	}
-	return Board{
-		data,
+func initialModel() Model {
+	b := NewBoard()
+	return Model{
+		board:      &b,
+		next_turn:  Team_X,
+		turn_count: 0,
+		selx:       1,
+		sely:       1,
 	}
 }
 
-func (b *Board) get(x, y int) Tile {
-	return b.data[x+3*y]
+func (m Model) Init() tea.Cmd {
+	return tea.SetWindowTitle("Tic Tac Toe")
 }
 
-func (b *Board) set(x, y int, val Tile) {
-	b.data[x+3*y] = val
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "up":
+			if m.sely > 0 {
+				m.sely--
+			}
+		case "down":
+			if m.sely < 2 {
+				m.sely++
+			}
+		case "left":
+			if m.selx > 0 {
+				m.selx--
+			}
+		case "right":
+			if m.selx < 2 {
+				m.selx++
+			}
+		case " ", "enter":
+			if m.outcome == "" {
+				m.play()
+			}
+		}
+	}
+
+	return m, nil
 }
 
-func (b *Board) display() {
+func (m *Model) play() {
+	if m.board.get(m.selx, m.sely) != Team_None {
+		m.errmsg = fmt.Sprintf(
+			"Position %d, %d is already taken by %s\n",
+			m.selx+1,
+			m.sely+1,
+			m.board.get(m.selx, m.sely).Name(),
+		)
+		return
+	}
+
+	m.errmsg = ""
+	m.board.set(m.selx, m.sely, m.next_turn)
+	m.turn_count++
+	switch m.next_turn {
+	case Team_O:
+		m.next_turn = Team_X
+	case Team_X:
+		m.next_turn = Team_O
+	}
+
+	w := m.board.getWinner()
+	if w != Team_None {
+		m.outcome = fmt.Sprintf("%s won!", w.Name())
+	} else if m.turn_count >= 9 {
+		m.outcome = "Draw!"
+	}
+}
+
+func (m Model) View() string {
+	s := fmt.Sprintf("Turn %d: %s\n", m.turn_count, m.next_turn.Name())
 	for i := 0; i < 9; i++ {
-		fmt.Printf("%c", b.data[i])
+		if i == m.selx+3*m.sely && m.outcome == "" {
+			s += "*"
+		} else {
+			s += string(m.board.data[i])
+		}
 		if i%3 == 2 {
-			fmt.Println()
+			s += "\n"
 		}
 	}
-}
-
-// Returns Tile_Empty if no winner
-func (b *Board) getWinner() Tile {
-	// Columns
-	for x := 0; x < 3; x++ {
-		if b.get(x, 0) != Tile_Empty && b.get(x, 0) == b.get(x, 1) && b.get(x, 1) == b.get(x, 2) {
-			return b.get(x, 0)
-		}
-	}
-
-	// Rows
-	for y := 0; y < 3; y++ {
-		if b.get(0, y) != Tile_Empty && b.get(0, y) == b.get(1, y) && b.get(1, y) == b.get(2, y) {
-			return b.get(0, y)
-		}
-	}
-
-	// Diagonals
-	if b.get(1, 1) != Tile_Empty && b.get(0, 0) == b.get(1, 1) && b.get(1, 1) == b.get(2, 2) {
-		return b.get(1, 1)
-	}
-	if b.get(1, 1) != Tile_Empty && b.get(2, 0) == b.get(1, 1) && b.get(1, 1) == b.get(0, 2) {
-		return b.get(1, 1)
-	}
-
-	return Tile_Empty
-}
-
-func getInput() (x, y int) {
-	var input string
-	ok := false
-
-	for ok == false {
-		fmt.Print("Row (1 top, 2 middle, 3 bottom): ")
-		_, err := fmt.Scanln(&input)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		y, err = strconv.Atoi(input)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		if y >= 1 && y <= 3 {
-			ok = true
-			y-- // User input is 1-based
-		} else {
-			fmt.Printf("%d is out of range\n", y)
-		}
-	}
-
-	ok = false
-	for ok == false {
-		fmt.Print("Column (1 left, 2 middle, 3 right): ")
-		_, err := fmt.Scanln(&input)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		x, err = strconv.Atoi(input)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		if x >= 1 && x <= 3 {
-			ok = true
-			x-- // User input is 1-based
-		} else {
-			fmt.Printf("%d is out of range\n", x)
-		}
-	}
-
-	return
+	s += m.errmsg + "\n"
+	s += m.outcome + "\n"
+	return s
 }
 
 func main() {
-	b := NewBoard()
-
-	turn := Tile_X
-	winner := Tile_Empty
-
-	for turn_count := 0; turn_count < 9; turn_count++ {
-		b.display()
-		fmt.Println("----------")
-		fmt.Printf("%s to play\n", TeamName[turn])
-
-		x, y := getInput()
-		for b.get(x, y) != Tile_Empty {
-			fmt.Println("Tile is not empty")
-			x, y = getInput()
-		}
-
-		b.set(x, y, turn)
-
-		switch turn {
-		case Tile_O:
-			turn = Tile_X
-		case Tile_X:
-			turn = Tile_O
-		}
-
-		winner = b.getWinner()
-		if winner != Tile_Empty {
-			break
-		}
-	}
-
-	if winner != Tile_Empty {
-		fmt.Println("---")
-		b.display()
-		fmt.Println("---")
-		fmt.Printf("%s won!\n", TeamName[winner])
-	} else {
-		fmt.Println("It's a tie!")
+	p := tea.NewProgram(initialModel())
+	_, err := p.Run()
+	if err != nil {
+		log.Fatalf("Alas, there's been an error: %v", err)
 	}
 }
